@@ -1,0 +1,26 @@
+{
+  "name": "student-task-notes-manager",
+  "version": "1.0.0",
+  "description": "A complete, modern Full Stack Student Task & Notes Manager web application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "express",
+    "javascript",
+    "jwt",
+    "student",
+    "task-manager",
+    "notes-manager"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard | Student Task & Notes Manager</title>
+  <meta name="description" content="View statistics, manage your academic tasks and edit colorful auto-saving notes directly inside your online workspace.">
+  <link rel="stylesheet" href="/css/style.css">
+  
+  <script>
+    // Immediate dark mode injection to prevent screen flash
+    (function() {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+        document.body && document.body.classList.add('dark');
+      }
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- Mobile Top Bar Header -->
+  <header class="mobile-header">
+    <button class="btn-sidebar-toggle" id="mobile-sidebar-toggle" aria-label="Toggle Navigation Drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+    <div class="mobile-logo">
+      <div class="mobile-logo-icon">S</div>
+      <span class="mobile-logo-title">Task & Notes</span>
+    </div>
+    <div class="user-avatar" id="mobile-avatar" style="width:28px; height:28px; font-size:12px; cursor:pointer;">U</div>
+  </header>
+
+  <div class="app-container">
+    
+    <!-- 1. Sleek Sidebar Drawer Navigation -->
+    <aside class="sidebar" id="sidebar-drawer">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo">S</div>
+        <span class="sidebar-title">Student Hub</span>
+      </div>
+
+      <nav class="sidebar-menu">
+        <div class="menu-item">
+          <a class="menu-link active" id="nav-overview" data-target="overview-section">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
+            </svg>
+            <span>Overview</span>
+          </a>
+        </div>
+        <div class="menu-item">
+          <a class="menu-link" id="nav-tasks" data-target="tasks-section">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+            <span>Tasks Manager</span>
+          </a>
+        </div>
+        <div class="menu-item">
+          <a class="menu-link" id="nav-notes" data-target="notes-section">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6m-6 4h3" />
+            </svg>
+            <span>Notes Sticky Grid</span>
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <!-- Theme Toggler switch wrapper -->
+        <div class="theme-switch">
+          <span>Dark Mode</span>
+          <button class="switch-btn" id="theme-toggle-btn" aria-label="Toggle Dark / Light Mode">
+            <!-- Icon will be dynamically injected by script -->
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:20px; height:20px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+          </button>
+        </div>
+
+        <button class="btn-logout" id="logout-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          <span>Log Out</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- 2. Core Workspace Main Area -->
+    <main class="main-content">
+      
+      <!-- Top Action Bar -->
+      <section class="top-navbar">
+        <div class="welcome-msg">
+          <h1 id="welcome-title">Hello, Scholar!</h1>
+          <p id="current-date-display">Thursday, May 21, 2026</p>
+        </div>
+
+        <div class="header-actions">
+          <!-- Dynamic live search bar (only visible when in relevant view) -->
+          <div class="header-search" id="header-search-bar">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input class="search-input" id="global-search-input" type="text" placeholder="Search tasks or notes...">
+          </div>
+
+          <!-- Glassmorphic Profile Menu Dropdown -->
+          <div class="profile-dropdown-container">
+            <div class="profile-trigger" id="profile-menu-trigger">
+              <div class="user-avatar" id="header-user-avatar">U</div>
+              <span id="header-username">Scholar</span>
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 14px; height: 14px; margin-left: 2px;">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            
+            <ul class="profile-dropdown-menu" id="profile-dropdown-list">
+              <li class="dropdown-header">
+                <p id="dropdown-name">User Name</p>
+                <p id="dropdown-email">user@university.edu</p>
+              </li>
+              <li class="dropdown-item" id="dropdown-settings-theme-toggle">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px; height:16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+                <span>Toggle Dark Theme</span>
+              </li>
+              <li class="dropdown-item" id="dropdown-delete-account-btn" style="color: var(--danger); border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 6px;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px; height:16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                <span>Delete Account</span>
+              </li>
+              <li class="dropdown-item" id="dropdown-logout-btn" style="color: var(--danger);">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px; height:16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                <span>Log Out</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ====================================================================
+           VIEWPANEL 1: PORTAL OVERVIEW (DASHBOARD)
+           ==================================================================== -->
+      <div class="content-section active" id="overview-section">
+        <!-- Overview statistics widgets -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon-box total">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+            </div>
+            <div class="stat-info">
+              <h3 id="stat-total-tasks">0</h3>
+              <p>Total Tasks</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-box completed">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+            <div class="stat-info">
+              <h3 id="stat-completed-tasks">0</h3>
+              <p>Completed Tasks</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-box pending">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+            <div class="stat-info">
+              <h3 id="stat-pending-tasks">0</h3>
+              <p>Pending Tasks</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon-box notes">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6m-6 4h3" /></svg>
+            </div>
+            <div class="stat-info">
+              <h3 id="stat-total-notes">0</h3>
+              <p>Saved Notes</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Access Dashboard Panels -->
+        <div class="dashboard-split-grid">
+          <!-- Recent Pending Tasks card -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <h2 class="panel-title">Urgent Tasks</h2>
+              <span class="panel-link" id="dashboard-view-tasks-link">View All Tasks</span>
+            </div>
+            <div class="tasks-list-container" id="dashboard-tasks-container">
+              <!-- Loading Skeleton -->
+              <div class="skeleton-card" style="height: 60px;"></div>
+              <div class="skeleton-card" style="height: 60px;"></div>
+            </div>
+          </div>
+
+          <!-- Recent Sticky Notes card -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <h2 class="panel-title">Recent Notes</h2>
+              <span class="panel-link" id="dashboard-view-notes-link">Sticky Grid</span>
+            </div>
+            <div class="notes-grid-container" id="dashboard-notes-container" style="grid-template-columns: 1fr;">
+              <!-- Loading Skeleton -->
+              <div class="skeleton-card" style="height: 140px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ====================================================================
+           VIEWPANEL 2: TASKS MANAGER
+           ==================================================================== -->
+      <div class="content-section" id="tasks-section">
+        <div class="tasks-toolbar">
+          <div class="tasks-filters">
+            <button class="filter-btn active" data-filter="all">All Tasks</button>
+            <button class="filter-btn" data-filter="pending">Pending</button>
+            <button class="filter-btn" data-filter="completed">Completed</button>
+            
+            <select class="filter-btn" id="task-priority-filter" style="appearance: none; -webkit-appearance: none; padding-right: 24px; background-image: url('data:image/svg+xml;utf8,<svg xmlns=&quot;http://www.w3.org/2000/svg&quot; fill=&quot;none&quot; viewBox=&quot;0 0 24 24&quot; stroke=&quot;%2364748b&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M19 9l-7 7-7-7&quot; /></svg>'); background-repeat: no-repeat; background-position: right 8px center; background-size: 12px;">
+              <option value="all">All Priorities</option>
+              <option value="High">High Priority</option>
+              <option value="Medium">Medium Priority</option>
+              <option value="Low">Low Priority</option>
+            </select>
+          </div>
+
+          <button class="btn-add-task" id="open-add-task-modal-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            <span>Add New Task</span>
+          </button>
+        </div>
+
+        <!-- Selection toolbar (hidden by default) -->
+        <div class="task-selection-toolbar" id="task-selection-toolbar" style="display: none;">
+          <div class="selection-left">
+            <input type="checkbox" id="select-all-tasks-checkbox" class="selection-checkbox" aria-label="Select all tasks">
+            <label for="select-all-tasks-checkbox" style="margin: 0; cursor: pointer; font-size: 14px;">
+              Select All (<span id="selected-count">0</span>/<span id="total-count">0</span>)
+            </label>
+          </div>
+          <button class="btn-delete-selected" id="delete-selected-tasks-btn" type="button">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+            <span>Delete Selected</span>
+          </button>
+        </div>
+
+        <div class="tasks-list-container" id="workspace-tasks-list">
+          <!-- Dynamic rendering target -->
+        </div>
+      </div>
+
+      <!-- ====================================================================
+           VIEWPANEL 3: NOTES GRID
+           ==================================================================== -->
+      <div class="content-section" id="notes-section">
+        <div class="notes-toolbar">
+          <p style="color: var(--text-secondary); font-size: 14px; font-weight: 500;">
+            👉 <i>Double-click card to edit note title or body. Content auto-saves dynamically!</i>
+          </p>
+          <button class="btn-add-note" id="add-new-note-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width: 16px; height: 16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+            <span>Create New Note</span>
+          </button>
+        </div>
+
+        <div class="notes-grid-container" id="workspace-notes-grid">
+          <!-- Dynamic rendering target -->
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ====================================================================
+       DIALOGS, MODALS & TOAST POPUPS
+       ==================================================================== -->
+
+  <!-- Add / Edit Task Modal Overlay -->
+  <div class="modal-overlay" id="task-modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 id="task-modal-title">Add New Task</h3>
+        <button class="modal-close-btn" id="close-task-modal-btn" aria-label="Close Modal Dialog">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+
+      <form id="task-modal-form">
+        <!-- Hidden input storing ID for updates -->
+        <input type="hidden" id="task-form-id">
+
+        <div class="modal-body">
+          <!-- Title Input -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" for="task-form-title">Task Title</label>
+            <input class="form-input" id="task-form-title" type="text" placeholder="e.g. Finish chemistry lab assignment" required style="padding-left:14px;">
+          </div>
+
+          <!-- Description Input -->
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label class="form-label" for="task-form-desc">Description</label>
+            <textarea class="form-input" id="task-form-desc" placeholder="Add further requirements, questions or parameters..." style="padding-left:14px; min-height: 80px; resize: vertical; font-family:var(--font-body);"></textarea>
+          </div>
+
+          <!-- Spanning priorities & dates -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <!-- Priority select -->
+            <div class="form-group">
+              <label class="form-label" for="task-form-priority">Priority</label>
+              <select class="form-input" id="task-form-priority" style="padding-left:14px;">
+                <option value="Low">Low</option>
+                <option value="Medium" selected>Medium</option>
+                <option value="High">High</option>
+              </select>
+            </div>
+            <!-- Due date picker -->
+            <div class="form-group">
+              <label class="form-label" for="task-form-date">Due Date</label>
+              <input class="form-input" id="task-form-date" type="date" style="padding-left:14px;">
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn-secondary" id="cancel-task-modal-btn" type="button">Cancel</button>
+          <button class="btn-submit" id="save-task-btn" type="submit" style="margin-top:0; width:auto; padding: 10px 24px;">Create Task</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Global scripts -->
+  <script src="/js/utils.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Task & Notes Manager - Welcome</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="Manage your school tasks, projects, color-coded sticky notes and stay organized with a beautiful SaaS productivity dashboard.">
+  <link rel="stylesheet" href="/css/style.css">
+  
+  <!-- Inline redirection logic to avoid FOUC (Flash of Unstyled Content) -->
+  <script>
+    (function() {
+      // Local dark mode initialization
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'dark') {
+        document.documentElement.classList.add('dark');
+      }
+
+      // Check session
+      const token = localStorage.getItem('student_app_token');
+      if (token) {
+        window.location.replace('/pages/dashboard.html');
+      } else {
+        window.location.replace('/pages/login.html');
+      }
+    })();
+  </script>
+  
+  <style>
+    .loading-container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background-color: #f6f8fb;
+    }
+    html.dark .loading-container {
+      background-color: #0b0f19;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid rgba(79, 70, 229, 0.1);
+      border-top-color: #4f46e5;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-text {
+      margin-top: 16px;
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="loading-container">
+    <div class="spinner"></div>
+    <div class="loading-text">Redirecting to workspace...</div>
+  </div>
+</body>
+</html>
