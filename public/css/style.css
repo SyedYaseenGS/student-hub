@@ -1880,6 +1880,34 @@ body.dark .note-card-footer {
   100% { transform: scale(0.9); opacity: 0.9; }
 }
 
+/* Wake-word toggle inside mic */
+.voice-mic-btn .va-wake-toggle {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: rgba(0,0,0,0.03);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 520;
+  transition: background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.voice-mic-btn .va-wake-toggle .va-wake-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger-light);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.voice-mic-btn .va-wake-toggle.on { background: var(--success-light); box-shadow: 0 6px 12px rgba(16,185,129,0.08); }
+.voice-mic-btn .va-wake-toggle.on .va-wake-dot { background: var(--success); transform: scale(1); }
+.voice-mic-btn .va-wake-toggle:not(.on) .va-wake-dot { background: var(--danger); transform: scale(0.9); }
+
 @media (max-width: 640px) {
   .voice-mic-btn { right: 14px; bottom: 14px; }
 }

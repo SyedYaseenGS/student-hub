@@ -57,6 +57,28 @@
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v11"></path><path d="M19 11a7 7 0 01-14 0"></path><path d="M5 21h14"></path></svg>
       <span class="va-pulse" aria-hidden="true"></span>
     `;
+    // Small wake-word toggle inside the mic button
+    const wakeToggle = document.createElement('button');
+    wakeToggle.className = 'va-wake-toggle' + (hotwordEnabled ? ' on' : '');
+    wakeToggle.title = 'Wake-word: ' + (hotwordEnabled ? 'on' : 'off');
+    wakeToggle.setAttribute('aria-pressed', String(!!hotwordEnabled));
+    wakeToggle.innerHTML = '<span class="va-wake-dot" aria-hidden="true"></span>';
+    wakeToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      hotwordEnabled = !hotwordEnabled;
+      localStorage.setItem(WAKE_ENABLED_KEY, hotwordEnabled ? 'true' : 'false');
+      wakeToggle.classList.toggle('on', hotwordEnabled);
+      wakeToggle.title = 'Wake-word: ' + (hotwordEnabled ? 'on' : 'off');
+      wakeToggle.setAttribute('aria-pressed', String(!!hotwordEnabled));
+      api.showToast && api.showToast(`${ASSISTANT_NAME}: Wake-word ${hotwordEnabled ? 'enabled' : 'disabled'}.`, 'info');
+      if (hotwordEnabled) {
+        if (micPermissionGranted) startHotwordListener();
+      } else {
+        stopHotwordListener();
+      }
+    });
+    micButton.appendChild(wakeToggle);
+    if (hotwordEnabled) micButton.classList.add('wake-on');
     document.body.appendChild(micButton);
 
     // (Focus mode removed per user request)
