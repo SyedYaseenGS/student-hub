@@ -955,7 +955,20 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchAllWorkspaceData().then(() => {
     const voiceAPI = {
       getTasks: () => appTasks,
-      openAddTaskModal: () => openTaskModal(null),
+      openAddTaskModal: (title) => {
+        openTaskModal(null);
+        if (title) {
+          // Prefill the title input shortly after modal opens
+          setTimeout(() => {
+            try {
+              taskFormTitle.value = title;
+              taskFormTitle.focus();
+            } catch (e) {
+              // ignore if elements not available
+            }
+          }, 140);
+        }
+      },
       showPendingTasks: () => {
         currentTaskFilter = 'pending';
         renderTasks();

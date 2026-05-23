@@ -31,7 +31,9 @@
     const synth = window.speechSynthesis || null;
     let recognition = null;
     let listening = false;
+    let userStopRequested = false;
     const ASSISTANT_NAME = 'Nexa';
+    const QUIET_MODE = true; // minimal speech by default
     const remindersSent = JSON.parse(localStorage.getItem('va_reminded') || '{}');
     const CHECK_INTERVAL = 2 * 60 * 1000; // every 2 minutes
     const LOOKAHEAD_HOURS = 24; // remind for tasks due within 24 hours
@@ -48,83 +50,12 @@
     `;
     document.body.appendChild(micButton);
 
-    // Focus Mode Card (Pomodoro)
-    const focusCard = document.createElement('div');
-    focusCard.className = 'focus-mode-card';
-    focusCard.innerHTML = `
-      <div class="focus-header">
-        <strong>Focus Mode</strong>
-        <button class="focus-close" title="Close">✕</button>
-      </div>
-      <div class="focus-body">
-        <div class="focus-timer" id="va-focus-timer">25:00</div>
-        <div class="focus-controls">
-          <button class="btn-secondary" id="va-focus-start">Start</button>
-          <button class="btn-secondary" id="va-focus-pause">Pause</button>
-          <button class="btn-secondary" id="va-focus-reset">Reset</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(focusCard);
-
-    const timerDisplay = focusCard.querySelector('#va-focus-timer');
-    const btnStart = focusCard.querySelector('#va-focus-start');
-    const btnPause = focusCard.querySelector('#va-focus-pause');
-    const btnReset = focusCard.querySelector('#va-focus-reset');
-    const btnClose = focusCard.querySelector('.focus-close');
-
-    let focusDuration = 25 * 60; // seconds
-    let remaining = focusDuration;
-    let focusInterval = null;
-
-    function formatTime(s) {
-      const mm = String(Math.floor(s / 60)).padStart(2, '0');
-      const ss = String(s % 60).padStart(2, '0');
-      return `${mm}:${ss}`;
-    }
-
-    function updateTimerDisplay() {
-      timerDisplay.textContent = formatTime(remaining);
-    }
-
-    function startFocus() {
-      if (focusInterval) return;
-      focusInterval = setInterval(() => {
-        remaining -= 1;
-        updateTimerDisplay();
-        if (remaining <= 0) {
-          clearInterval(focusInterval);
-          focusInterval = null;
-          remaining = focusDuration;
-          updateTimerDisplay();
-          speak(`${ASSISTANT_NAME}: Focus session completed. Take a short break.`);
-          playAlarm();
-        }
-      }, 1000);
-    }
-
-    function pauseFocus() {
-      if (focusInterval) {
-        clearInterval(focusInterval);
-        focusInterval = null;
-      }
-    }
-
-    function resetFocus() {
-      pauseFocus();
-      remaining = focusDuration;
-      updateTimerDisplay();
-    }
-
-    btnStart.addEventListener('click', () => { startFocus(); speak(`${ASSISTANT_NAME}: Focus session started for 25 minutes.`); });
-    btnPause.addEventListener('click', () => { pauseFocus(); speak(`${ASSISTANT_NAME}: Focus session paused.`); });
-    btnReset.addEventListener('click', () => { resetFocus(); speak(`${ASSISTANT_NAME}: Focus session reset.`); });
-    btnClose.addEventListener('click', () => { focusCard.classList.toggle('hidden'); });
+    // (Focus mode removed per user request)
 
     // Toggle mic listening
     micButton.addEventListener('click', () => {
       if (!SpeechRecognition) {
-        api.showToast && api.showToast('SpeechRecognition not supported in this browser.', 'warning');
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: SpeechRecognition not supported in this browser.`, 'warning');
         return;
       }
       if (!listening) startListening(); else stopListening();
@@ -132,38 +63,61 @@
 
     function startListening() {
       try {
+        userStopRequested = false;
         recognition = new SpeechRecognition();
         recognition.lang = 'en-US';
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
+        recognition.continuous = true;
+
+        recognition.onstart = () => {
+          listening = true;
+          micButton.classList.add('active');
+          friendlyLog('Recognition started');
+        };
 
         recognition.onresult = (ev) => {
-          const text = ev.results[0][0].transcript;
+          // Process latest result text
+          const result = ev.results[ev.results.length - 1];
+          const text = (result && result[0] && result[0].transcript) ? result[0].transcript : '';
           friendlyLog('Heard:', text);
-          processCommand(text || '');
+          if (text) processCommand(text || '');
         };
 
         recognition.onerror = (ev) => {
           friendlyLog('Recognition error', ev.error);
-          api.showToast && api.showToast('Voice recognition error: ' + ev.error, 'error');
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: Voice recognition error: ${ev.error}`, 'error');
         };
 
         recognition.onend = () => {
-          listening = false;
-          micButton.classList.remove('active');
+          friendlyLog('Recognition ended');
+          // Auto-restart if user did not request stop (keeps listening)
+          if (!userStopRequested) {
+            try {
+              setTimeout(() => {
+                recognition && recognition.start();
+              }, 300);
+            } catch (e) {
+              friendlyLog('Auto-restart failed', e);
+              listening = false;
+              micButton.classList.remove('active');
+            }
+          } else {
+            listening = false;
+            micButton.classList.remove('active');
+          }
         };
 
         recognition.start();
-        listening = true;
-        micButton.classList.add('active');
       } catch (e) {
         console.error('VA startListening failed', e);
-        api.showToast && api.showToast('Voice assistant failed to start.', 'error');
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: Voice assistant failed to start.`, 'error');
       }
     }
 
     function stopListening() {
       try {
+        userStopRequested = true;
         if (recognition) recognition.stop();
       } catch (e) { /* ignore */ }
       listening = false;
@@ -180,6 +134,12 @@
       } catch (e) {
         console.error('SpeechSynthesis error', e);
       }
+    }
+
+    function speakIfAllowed(text, force = false) {
+      if (!text) return;
+      if (force) return speak(text);
+      if (!QUIET_MODE) speak(text);
     }
 
     // Small multi-beep alarm using WebAudio
@@ -275,9 +235,9 @@
         // ignore
       }
 
-      // Visual toast + voice (prefix with assistant name)
+      // Visual toast + voice (prefix with assistant name). Reminders always speak.
       api.showToast && api.showToast(`${ASSISTANT_NAME}: ${message}`, 'warning');
-      speak(`${ASSISTANT_NAME}: ${message.replace('Reminder: ', '')}`); // speak shorter text with assistant name
+      speak(`${ASSISTANT_NAME}: ${message.replace('Reminder: ', '')}`);
       playAlarm();
     }
 
@@ -287,11 +247,12 @@
         const pending = (ev.detail && ev.detail.pendingTasks) || [];
         if (pending.length > 0) {
           const next = pending[0];
-          const response = `${ASSISTANT_NAME}: Great job. Your next important task is ${next.title}.`;
-          api.showToast && api.showToast(response, 'success');
-          speak(response);
+          const response = `Great job. Next: ${next.title}.`;
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: ${response}`, 'success');
+          speakIfAllowed(`${ASSISTANT_NAME}: ${response}`);
         } else {
-          speak(`${ASSISTANT_NAME}: Great job. All tasks are complete.`);
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: All tasks complete.`, 'success');
+          speakIfAllowed(`${ASSISTANT_NAME}: All tasks complete.`);
         }
       } catch (e) {
         console.error('taskCompleted handler error', e);
@@ -304,10 +265,31 @@
       if (!text) return;
       friendlyLog('Processing command:', text);
 
-      // Add task
+      // Helper: find best matching pending task by title
+      function findTaskByTitle(q) {
+        if (!q) return null;
+        const tasks = (api.getTasks && api.getTasks()) || [];
+        const cleaned = q.toLowerCase().replace(/["']/g, '').trim();
+        // exact
+        let candidate = tasks.find(t => !t.completed && t.title && t.title.toLowerCase() === cleaned);
+        if (candidate) return candidate;
+        // substring
+        candidate = tasks.find(t => !t.completed && t.title && t.title.toLowerCase().includes(cleaned));
+        if (candidate) return candidate;
+        // all-words match
+        const words = cleaned.split(/\s+/).filter(Boolean);
+        candidate = tasks.find(t => !t.completed && t.title && words.every(w => t.title.toLowerCase().includes(w)));
+        return candidate || null;
+      }
+
+      // Add task (optionally: "add task <title>")
       if (text.includes('add task') || text.includes('create task')) {
-        api.openAddTaskModal && api.openAddTaskModal();
-        speak(`${ASSISTANT_NAME}: Opening the add task dialog.`);
+        // extract title after phrase if present
+        let title = text.replace(/^.*(?:add|create)\s+task[s]?\s*/i, '').trim();
+        if (!title) title = '';
+        if (api.openAddTaskModal) api.openAddTaskModal(title || undefined);
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: Opened add-task dialog.`, 'info');
+        speakIfAllowed(`${ASSISTANT_NAME}: Opened add-task dialog.`);
         return;
       }
 
@@ -315,21 +297,22 @@
       if (text.includes('show pending') || text.includes('pending tasks')) {
         api.showPendingTasks && api.showPendingTasks();
         const n = (api.getTasks && api.getTasks().filter(t => !t.completed).length) || 0;
-        speak(`${ASSISTANT_NAME}: You have ${n} pending task${n!==1?'s':''}.`);
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`, 'info');
+        speakIfAllowed(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`);
         return;
       }
 
-      // Read today's tasks
+      // Read today's tasks (quiet mode: show toast instead of verbose reading)
       if (text.includes('read') && (text.includes('today') || text.includes("today's"))) {
         const todays = api.readTodaysTasks ? api.readTodaysTasks() : [];
         if (!todays || todays.length === 0) {
-          speak(`${ASSISTANT_NAME}: You have no tasks due today.`);
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: No tasks due today.`, 'info');
+          speakIfAllowed(`${ASSISTANT_NAME}: You have no tasks due today.`);
         } else {
-          speak(`${ASSISTANT_NAME}: You have ${todays.length} tasks due today. I'll read them now.`);
-          for (let i = 0; i < todays.length; i++) {
-            const t = todays[i];
-            speak(`${i+1}. ${t.title}`);
-          }
+          const titles = todays.map(t => t.title).filter(Boolean).slice(0, 6).join('; ');
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: Tasks today: ${titles}`, 'info');
+          // only speak full list if not quiet
+          if (!QUIET_MODE) speak(`${ASSISTANT_NAME}: You have ${todays.length} tasks due today. ${titles}`);
         }
         return;
       }
@@ -337,26 +320,36 @@
       // Open sticky notes
       if (text.includes('open sticky') || text.includes('open notes') || text.includes('sticky notes')) {
         api.switchSection && api.switchSection('notes-section');
-        speak(`${ASSISTANT_NAME}: Opening sticky notes.`);
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: Opening notes.`, 'info');
+        speakIfAllowed(`${ASSISTANT_NAME}: Opening notes.`);
         return;
       }
 
-      // Mark task complete (optionally with title following phrase)
-      if (text.includes('mark task complete') || text.includes('complete task')) {
-        // Try to extract the title mentioned after the phrase
-        const after = text.replace('mark task complete', '').replace('complete task', '').trim();
-        if (after && api.markTaskCompleteByTitle) {
-          const found = await api.markTaskCompleteByTitle(after);
-          if (found) {
-            speak(`${ASSISTANT_NAME}: Marked ${found.title} as complete.`);
-          } else {
-            speak(`${ASSISTANT_NAME}: I couldn't find a matching task. Please try saying the task title more clearly.`);
-          }
-        } else if (api.getTasks) {
-          // if no title provided, suggest the most recent pending
-          const pending = (api.getTasks().filter(t => !t.completed) || []);
-          if (pending.length === 0) { speak(`${ASSISTANT_NAME}: You have no pending tasks to mark complete.`); }
-          else { await api.markTaskCompleteByTitle && api.markTaskCompleteByTitle(pending[0].title); speak(`${ASSISTANT_NAME}: Marked ${pending[0].title} as complete.`); }
+      // Mark task complete (support many phrasings)
+      if (/(?:mark|set|make)?\s*(?:task)?\s*(?:complete|completed|done|finish)|\bdone\b|\bcomplete\b/.test(text)) {
+        // Try to extract the title via multiple heuristics
+        let title = null;
+        // patterns like "mark <title> complete"
+        let m = text.match(/mark\s+(.+?)\s+complete$/i);
+        if (m) title = m[1];
+        // patterns like "complete <title>"
+        if (!title) {
+          m = text.match(/(?:complete|done|finish)\s+(.+)/i);
+          if (m) title = m[1];
+        }
+        // fallback: remove keywords
+        if (!title) {
+          title = text.replace(/(?:mark|task|complete|completed|done|finish)/gi, '').trim();
+        }
+
+        const candidate = findTaskByTitle(title);
+        if (candidate && api.markTaskCompleteByTitle) {
+          await api.markTaskCompleteByTitle(candidate.title);
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: Marked '${candidate.title}' complete.`, 'success');
+          speakIfAllowed(`${ASSISTANT_NAME}: Marked ${candidate.title} complete.`);
+        } else {
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: Could not find matching pending task.`, 'warning');
+          speakIfAllowed(`${ASSISTANT_NAME}: I couldn't find that task.`);
         }
         return;
       }
@@ -365,26 +358,19 @@
       if (text.includes('next priority') || text.includes('what is my next') || text.includes('next important')) {
         const next = api.getNextPriorityTask && api.getNextPriorityTask();
         if (next) {
-          const resp = `${ASSISTANT_NAME}: Your next priority task is ${next.title}${next.dueDate ? ' due ' + (new Date(next.dueDate)).toLocaleDateString() : ''}.`;
-          speak(resp);
-          api.showToast && api.showToast(resp, 'info');
+          const resp = `Your next priority task is ${next.title}${next.dueDate ? ' due ' + (new Date(next.dueDate)).toLocaleDateString() : ''}.`;
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: ${resp}`, 'info');
+          speakIfAllowed(`${ASSISTANT_NAME}: ${resp}`);
         } else {
-          speak(`${ASSISTANT_NAME}: You have no pending tasks.`);
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: You have no pending tasks.`, 'info');
+          speakIfAllowed(`${ASSISTANT_NAME}: You have no pending tasks.`);
         }
         return;
       }
 
-      // Focus mode commands
-      if (text.includes('start focus') || text.includes('start pomodoro') || text.includes('start focus mode')) {
-        startFocus();
-        speak(`${ASSISTANT_NAME}: Starting a 25 minute focus session.`);
-        return;
-      }
-      if (text.includes('pause focus') || text.includes('pause timer')) { pauseFocus(); speak(`${ASSISTANT_NAME}: Paused the focus timer.`); return; }
-      if (text.includes('reset focus') || text.includes('reset timer')) { resetFocus(); speak(`${ASSISTANT_NAME}: Reset the focus timer.`); return; }
-
-      // Unknown command fallback
-      speak(`${ASSISTANT_NAME}: Sorry, I did not understand that. Try: add task, show pending tasks, read today\'s tasks, open sticky notes, mark task complete, next priority task, or start focus mode.`);
+      // Unknown command fallback (quiet)
+      api.showToast && api.showToast(`${ASSISTANT_NAME}: Command not recognized. Try: add task, show pending, mark task complete, next priority, or open notes.`, 'warning');
+      speakIfAllowed(`${ASSISTANT_NAME}: Sorry, I did not understand that.`, false);
     }
 
     // Start the periodic reminders check

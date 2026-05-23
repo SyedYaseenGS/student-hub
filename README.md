@@ -133,9 +133,9 @@ Once the server boot console message appears, navigate your web browser to:
 `Nexa` is a lightweight browser-based voice assistant and reminder system added to the dashboard. Key points:
 
 - Files added/changed:
-  - [public/js/voiceAssistant.js](public/js/voiceAssistant.js) — main assistant, reminders, Pomodoro focus mode.
+  - [public/js/voiceAssistant.js](public/js/voiceAssistant.js) — main assistant and reminders.
   - [public/pages/dashboard.html](public/pages/dashboard.html) — includes assistant script.
-  - [public/css/style.css](public/css/style.css) — styles for floating mic and focus card.
+  - [public/css/style.css](public/css/style.css) — styles for floating mic.
   - [public/js/dashboard.js](public/js/dashboard.js) — initializes the assistant after data loads.
   - [public/js/utils.js](public/js/utils.js) — emits a `taskCompleted` event used by the assistant.
 
@@ -143,7 +143,7 @@ Once the server boot console message appears, navigate your web browser to:
   - `Nexa` uses the browser SpeechRecognition API to listen to commands and SpeechSynthesis to speak responses.
   - Periodically (every 2 minutes) `Nexa` checks tasks with due dates and announces reminders (voice + notification + alarm beep).
   - When a task is completed, `Nexa` will suggest your next highest-priority pending task aloud.
-  - A Pomodoro-style Focus Mode (25 minutes) UI card is available with Start / Pause / Reset and voice announcements.
+  - `Nexa` will suggest next-priority tasks and announce reminders when appropriate.
 
 - Permissions & notes:
   - For desktop-style popups, grant the browser `Notification` permission when prompted.
