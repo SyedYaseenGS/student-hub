@@ -125,3 +125,29 @@ Once the server boot console message appears, navigate your web browser to:
 * `POST /api/notes` - Create a new blank yellow pastel note.
 * `PUT /api/notes/:id` - Update note content or change theme pastel color. Expects JSON `{ title, content, color }`.
 * `DELETE /api/notes/:id` - Delete sticky note by ID.
+
+---
+
+## 🗣️ Nexa — Voice Assistant & Smart Reminders (New)
+
+`Nexa` is a lightweight browser-based voice assistant and reminder system added to the dashboard. Key points:
+
+- Files added/changed:
+  - [public/js/voiceAssistant.js](public/js/voiceAssistant.js) — main assistant, reminders, Pomodoro focus mode.
+  - [public/pages/dashboard.html](public/pages/dashboard.html) — includes assistant script.
+  - [public/css/style.css](public/css/style.css) — styles for floating mic and focus card.
+  - [public/js/dashboard.js](public/js/dashboard.js) — initializes the assistant after data loads.
+  - [public/js/utils.js](public/js/utils.js) — emits a `taskCompleted` event used by the assistant.
+
+- How it works:
+  - `Nexa` uses the browser SpeechRecognition API to listen to commands and SpeechSynthesis to speak responses.
+  - Periodically (every 2 minutes) `Nexa` checks tasks with due dates and announces reminders (voice + notification + alarm beep).
+  - When a task is completed, `Nexa` will suggest your next highest-priority pending task aloud.
+  - A Pomodoro-style Focus Mode (25 minutes) UI card is available with Start / Pause / Reset and voice announcements.
+
+- Permissions & notes:
+  - For desktop-style popups, grant the browser `Notification` permission when prompted.
+  - For voice commands, allow microphone access when the browser asks.
+  - No extra npm packages were required — everything runs client-side with built-in browser APIs.
+
+If you want me to tweak Nexa's wakeword, add more commands, or wire richer natural-language parsing for adding tasks by voice, tell me which behaviors you'd like enhanced.

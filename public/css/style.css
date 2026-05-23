@@ -1833,3 +1833,76 @@ body.dark .note-card-footer {
     width: 100%;
   }
 }
+
+/* ------------------------------
+   Voice Assistant & Focus Mode
+   ------------------------------ */
+.voice-mic-btn {
+  position: fixed;
+  bottom: 22px;
+  right: 22px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  color: var(--primary);
+  z-index: 500;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+}
+.voice-mic-btn:hover { transform: translateY(-4px); }
+.voice-mic-btn.active {
+  background-color: var(--primary);
+  color: white;
+  box-shadow: var(--shadow-primary);
+  transform: scale(1.03);
+}
+.voice-mic-btn .va-pulse {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--warning), var(--primary));
+  opacity: 0;
+  transform-origin: center;
+}
+.voice-mic-btn.active .va-pulse { opacity: 1; animation: va-pulse 1s ease-in-out infinite; }
+@keyframes va-pulse {
+  0% { transform: scale(0.8); opacity: 0.9; }
+  50% { transform: scale(1.25); opacity: 0.6; }
+  100% { transform: scale(0.9); opacity: 0.9; }
+}
+
+.focus-mode-card {
+  position: fixed;
+  bottom: 22px;
+  right: 92px;
+  width: 260px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-md);
+  box-shadow: var(--shadow-lg);
+  padding: 12px;
+  z-index: 480;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform var(--transition-fast), opacity var(--transition-fast);
+}
+.focus-mode-card.hidden { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.focus-mode-card .focus-header { display:flex; justify-content:space-between; align-items:center; font-size:13px; color:var(--text-primary); }
+.focus-mode-card .focus-close { background:none; border:none; cursor:pointer; color:var(--text-muted); }
+.focus-mode-card .focus-timer { font-size:24px; font-weight:700; text-align:center; color:var(--text-primary); }
+.focus-mode-card .focus-controls { display:flex; gap:8px; justify-content:center; }
+
+@media (max-width: 640px) {
+  .voice-mic-btn { right: 14px; bottom: 14px; }
+  .focus-mode-card { right: 14px; bottom: 80px; width: 220px; }
+}

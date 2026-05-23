@@ -250,6 +250,13 @@ window.showTaskCompletionReminder = function(completedTask, pendingTasks = [], o
 
   panel.classList.add('active');
 
+  // Notify other modules (voice assistant) that a task was completed
+  try {
+    document.dispatchEvent(new CustomEvent('taskCompleted', { detail: { completedTask, pendingTasks: sortedPending } }));
+  } catch (e) {
+    // ignore dispatch errors in older browsers
+  }
+
   document.getElementById('task-reminder-close-btn').onclick = hideTaskCompletionReminder;
   document.getElementById('task-reminder-dismiss-btn').onclick = hideTaskCompletionReminder;
 

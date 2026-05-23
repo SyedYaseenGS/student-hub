@@ -952,5 +952,50 @@ document.addEventListener('DOMContentLoaded', () => {
   // ====================================================================
   
   // Trigger initial database fetch routines
-  fetchAllWorkspaceData();
+  fetchAllWorkspaceData().then(() => {
+    const voiceAPI = {
+      getTasks: () => appTasks,
+      openAddTaskModal: () => openTaskModal(null),
+      showPendingTasks: () => {
+        currentTaskFilter = 'pending';
+        renderTasks();
+        switchSection('tasks-section');
+      },
+      switchSection,
+      markTaskCompleteByTitle: async (title) => {
+        if (!title) return null;
+        const candidate = appTasks.find(t => !t.completed && t.title && t.title.toLowerCase().includes((title || '').toLowerCase()));
+        if (candidate) {
+          await toggleTaskCompletionStatus(candidate.id);
+          return candidate;
+        }
+        return null;
+      },
+      getNextPriorityTask: () => {
+        const pending = appTasks.filter(t => !t.completed);
+        if (!pending.length) return null;
+        pending.sort((a,b) => {
+          if (a.priority === 'High' && b.priority !== 'High') return -1;
+          if (a.priority !== 'High' && b.priority === 'High') return 1;
+          if (!a.dueDate) return 1;
+          if (!b.dueDate) return -1;
+          return new Date(a.dueDate) - new Date(b.dueDate);
+        });
+        return pending[0];
+      },
+      readTodaysTasks: () => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        return appTasks.filter(t => !t.completed && t.dueDate && (t.dueDate.split('T')[0] === todayStr || t.dueDate === todayStr));
+      },
+      showToast
+    };
+
+    if (window.initializeVoiceAssistant) {
+      try {
+        window.initializeVoiceAssistant(voiceAPI);
+      } catch (err) {
+        console.error('Voice Assistant initialization failed:', err);
+      }
+    }
+  });
 });
