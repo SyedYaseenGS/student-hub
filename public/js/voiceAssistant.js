@@ -34,6 +34,13 @@
     let userStopRequested = false;
     let silenceTimer = null;
     const SILENCE_TIMEOUT_MS = 5000; // auto-stop after 5 seconds of silence
+
+    // Hotword / wake-word support
+    let hotwordRecognition = null;
+    let hotwordActive = false;
+    const WAKE_ENABLED_KEY = 'va_wake_enabled';
+    let hotwordEnabled = localStorage.getItem(WAKE_ENABLED_KEY) !== 'false'; // default true
+    let micPermissionGranted = false; // set true after a successful manual recognition start
     const ASSISTANT_NAME = 'Nexa';
     const QUIET_MODE = true; // minimal speech by default
     const remindersSent = JSON.parse(localStorage.getItem('va_reminded') || '{}');
@@ -83,6 +90,8 @@
     function startListening() {
       try {
         userStopRequested = false;
+        // if a hotword listener is active, stop it before starting the main recognizer
+        if (hotwordActive) stopHotwordListener();
         recognition = new SpeechRecognition();
         recognition.lang = 'en-US';
         // Allow interim results to detect speech quickly; act on final results only
@@ -93,6 +102,7 @@
         recognition.onstart = () => {
           listening = true;
           micButton.classList.add('active');
+          micPermissionGranted = true;
           friendlyLog('Recognition started');
         };
 
@@ -129,6 +139,10 @@
           } else {
             listening = false;
             micButton.classList.remove('active');
+            // If user stopped and hotword/wake is enabled, try starting hotword listener
+            if (hotwordEnabled && micPermissionGranted) {
+              startHotwordListener();
+            }
           }
         };
 
@@ -149,6 +163,74 @@
       listening = false;
       clearSilenceTimer();
       micButton.classList.remove('active');
+      // After explicit stop, if wake-word is enabled and mic permission previously granted,
+      // begin a lightweight hotword listener so saying "hey nexa" will wake the assistant.
+      if (hotwordEnabled && micPermissionGranted) startHotwordListener();
+    }
+
+    function startHotwordListener() {
+      if (!SpeechRecognition) return;
+      if (hotwordActive) return;
+      try {
+        hotwordRecognition = new SpeechRecognition();
+        hotwordRecognition.lang = 'en-US';
+        hotwordRecognition.interimResults = true;
+        hotwordRecognition.maxAlternatives = 1;
+        hotwordRecognition.continuous = true;
+
+        hotwordRecognition.onstart = () => {
+          hotwordActive = true;
+          micButton.classList.add('hotword');
+          friendlyLog('Hotword listener started');
+        };
+
+        hotwordRecognition.onresult = (ev) => {
+          const result = ev.results[ev.results.length - 1];
+          const isFinal = !!result.isFinal;
+          const text = (result && result[0] && result[0].transcript) ? result[0].transcript : '';
+          friendlyLog('Hotword heard (final=' + isFinal + '):', text);
+          const cleaned = (text || '').toLowerCase();
+          // Detect phrases like "hey nexa" or simply "nexa" (short utterances)
+          if (/\bhey\s+nexa\b/.test(cleaned) || (isFinal && /\bnexa\b/.test(cleaned))) {
+            friendlyLog('Wake word detected:', text);
+            try { if (hotwordRecognition) hotwordRecognition.stop(); } catch (e) { /* ignore */ }
+            hotwordActive = false;
+            micButton.classList.remove('hotword');
+            // brief audio cue to show activation (non-intrusive)
+            try { playAlarm(); } catch (e) { /* ignore */ }
+            userStopRequested = false;
+            // Start the full listener so the user can speak the command
+            setTimeout(() => startListening(), 120);
+          }
+        };
+
+        hotwordRecognition.onerror = (ev) => {
+          friendlyLog('Hotword recognition error', ev && ev.error);
+          stopHotwordListener();
+        };
+
+        hotwordRecognition.onend = () => {
+          friendlyLog('Hotword recognition ended');
+          hotwordActive = false;
+          micButton.classList.remove('hotword');
+          // Try to restart hotword listener automatically unless user explicitly stopped
+          if (hotwordEnabled && micPermissionGranted && !userStopRequested) {
+            try { setTimeout(() => hotwordRecognition && hotwordRecognition.start(), 400); } catch (e) { friendlyLog('hotword restart failed', e); }
+          }
+        };
+
+        hotwordRecognition.start();
+      } catch (e) {
+        friendlyLog('startHotwordListener failed', e);
+        hotwordActive = false;
+      }
+    }
+
+    function stopHotwordListener() {
+      try { userStopRequested = true; if (hotwordRecognition) hotwordRecognition.stop(); } catch (e) { /* ignore */ }
+      hotwordActive = false;
+      hotwordRecognition = null;
+      micButton.classList.remove('hotword');
     }
 
     function speak(text) {
