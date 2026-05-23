@@ -1,29 +1,17 @@
 /*
- * Lightweight Voice Assistant & Smart Reminder System
- * - Uses browser SpeechRecognition & SpeechSynthesis for voice I/O
- * - Uses Notifications + custom popups + WebAudio alarm for reminders
- * - Minimal, modular and runs entirely in the browser (no heavy libs)
+ * Nexa — Simple Voice Assistant (Lightweight Edition)
+ * - Uses browser SpeechRecognition API to listen for commands
+ * - Simple, fast, and easy for anyone (including kids) to use
+ * - No background listening, no lag, just click → speak → get result
  *
  * Initialize from the dashboard by calling:
  *   window.initializeVoiceAssistant(api)
- *
- * Expected `api` object (small surface):
- * - getTasks(): Array of tasks
- * - openAddTaskModal(): opens add task modal
- * - showPendingTasks(): navigate to tasks with pending filter
- * - switchSection(id): navigate to section (e.g. 'notes-section')
- * - markTaskCompleteByTitle(title): try to mark a task completed by title
- * - getNextPriorityTask(): returns next important pending task
- * - readTodaysTasks(): returns tasks due today
- * - showToast(message, type): UI toast helper
  */
 
 (function () {
-  function friendlyLog(...args) { if (window.DEBUG_VA) console.log('[VA]', ...args); }
-
   window.initializeVoiceAssistant = function (api) {
     if (!api || typeof api.getTasks !== 'function') {
-      console.warn('VoiceAssistant: missing API object, initialization aborted.');
+      console.warn('VoiceAssistant: missing API, skipping initialization.');
       return;
     }
 
@@ -31,490 +19,162 @@
     const synth = window.speechSynthesis || null;
     let recognition = null;
     let listening = false;
-    let userStopRequested = false;
-    let silenceTimer = null;
-    const SILENCE_TIMEOUT_MS = 5000; // auto-stop after 5 seconds of silence
 
-    // Hotword / wake-word support
-    let hotwordRecognition = null;
-    let hotwordActive = false;
-    const WAKE_ENABLED_KEY = 'va_wake_enabled';
-    let hotwordEnabled = localStorage.getItem(WAKE_ENABLED_KEY) !== 'false'; // default true
-    let micPermissionGranted = false; // set true after a successful manual recognition start
     const ASSISTANT_NAME = 'Nexa';
-    const QUIET_MODE = true; // minimal speech by default
-    const remindersSent = JSON.parse(localStorage.getItem('va_reminded') || '{}');
-    const CHECK_INTERVAL = 2 * 60 * 1000; // every 2 minutes
-    const LOOKAHEAD_HOURS = 24; // remind for tasks due within 24 hours
 
-    // Create floating mic button
+    // Simple floating mic button
     const micButton = document.createElement('button');
     micButton.id = 'va-mic-btn';
     micButton.className = 'voice-mic-btn';
     micButton.title = `${ASSISTANT_NAME} — click to speak`;
-    micButton.setAttribute('aria-label', ASSISTANT_NAME + ' voice assistant');
+    micButton.setAttribute('aria-label', `${ASSISTANT_NAME} voice assistant`);
     micButton.innerHTML = `
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1v11"></path><path d="M19 11a7 7 0 01-14 0"></path><path d="M5 21h14"></path></svg>
-      <span class="va-pulse" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M12 1v11"></path>
+        <path d="M19 11a7 7 0 01-14 0"></path>
+        <path d="M5 21h14"></path>
+      </svg>
     `;
-    // Small wake-word toggle inside the mic button
-    const wakeToggle = document.createElement('button');
-    wakeToggle.className = 'va-wake-toggle' + (hotwordEnabled ? ' on' : '');
-    wakeToggle.title = 'Wake-word: ' + (hotwordEnabled ? 'on' : 'off');
-    wakeToggle.setAttribute('aria-pressed', String(!!hotwordEnabled));
-    wakeToggle.innerHTML = '<span class="va-wake-dot" aria-hidden="true"></span>';
-    wakeToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      hotwordEnabled = !hotwordEnabled;
-      localStorage.setItem(WAKE_ENABLED_KEY, hotwordEnabled ? 'true' : 'false');
-      wakeToggle.classList.toggle('on', hotwordEnabled);
-      wakeToggle.title = 'Wake-word: ' + (hotwordEnabled ? 'on' : 'off');
-      wakeToggle.setAttribute('aria-pressed', String(!!hotwordEnabled));
-      api.showToast && api.showToast(`${ASSISTANT_NAME}: Wake-word ${hotwordEnabled ? 'enabled' : 'disabled'}.`, 'info');
-      if (hotwordEnabled) {
-        if (micPermissionGranted) startHotwordListener();
-      } else {
-        stopHotwordListener();
-      }
-    });
-    micButton.appendChild(wakeToggle);
-    if (hotwordEnabled) micButton.classList.add('wake-on');
     document.body.appendChild(micButton);
 
-    // (Focus mode removed per user request)
+    document.body.appendChild(micButton);
 
-    // Toggle mic listening
     micButton.addEventListener('click', () => {
       if (!SpeechRecognition) {
-        api.showToast && api.showToast(`${ASSISTANT_NAME}: SpeechRecognition not supported in this browser.`, 'warning');
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: Microphone not supported.`, 'warning');
         return;
       }
-      if (!listening) startListening(); else stopListening();
+      if (!listening) {
+        startListening();
+      } else {
+        stopListening();
+      }
     });
 
-    function resetSilenceTimer() {
-      try {
-        if (silenceTimer) clearTimeout(silenceTimer);
-        silenceTimer = setTimeout(() => {
-          friendlyLog('Silence timeout reached — stopping recognition');
-          userStopRequested = true; // prevent auto-restart
-          try { if (recognition) recognition.stop(); } catch (e) { /* ignore */ }
-          listening = false;
-          micButton.classList.remove('active');
-        }, SILENCE_TIMEOUT_MS);
-      } catch (e) { /* ignore */ }
-    }
-
-    function clearSilenceTimer() {
-      try { if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; } } catch (e) { }
-    }
-
-    function startListening() {
-      try {
-        userStopRequested = false;
-        // if a hotword listener is active, stop it before starting the main recognizer
-        if (hotwordActive) stopHotwordListener();
-        recognition = new SpeechRecognition();
-        recognition.lang = 'en-US';
-        // Allow interim results to detect speech quickly; act on final results only
-        recognition.interimResults = true;
-        recognition.maxAlternatives = 1;
-        recognition.continuous = true;
-
-        recognition.onstart = () => {
-          listening = true;
-          micButton.classList.add('active');
-          micPermissionGranted = true;
-          friendlyLog('Recognition started');
-        };
-
-        recognition.onresult = (ev) => {
-          // Reset silence timer on any partial or final speech
-          resetSilenceTimer();
-          // Process only final results to avoid duplicate handling
-          const result = ev.results[ev.results.length - 1];
-          const isFinal = !!result.isFinal;
-          const text = (result && result[0] && result[0].transcript) ? result[0].transcript : '';
-          friendlyLog('Heard (final=' + isFinal + '):', text);
-          if (isFinal && text) processCommand(text || '', { direct: true });
-        };
-
-        recognition.onerror = (ev) => {
-          friendlyLog('Recognition error', ev.error);
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: Voice recognition error: ${ev.error}`, 'error');
-        };
-
-        recognition.onend = () => {
-          friendlyLog('Recognition ended');
-          clearSilenceTimer();
-          // Auto-restart if user did not request stop (keeps listening)
-          if (!userStopRequested) {
-            try {
-              setTimeout(() => {
-                recognition && recognition.start();
-              }, 300);
-            } catch (e) {
-              friendlyLog('Auto-restart failed', e);
-              listening = false;
-              micButton.classList.remove('active');
-            }
-          } else {
-            listening = false;
-            micButton.classList.remove('active');
-            // If user stopped and hotword/wake is enabled, try starting hotword listener
-            if (hotwordEnabled && micPermissionGranted) {
-              startHotwordListener();
-            }
-          }
-        };
-
-        recognition.start();
-        // start silence timer so it auto-stops if user doesn't speak
-        resetSilenceTimer();
-      } catch (e) {
-        console.error('VA startListening failed', e);
-        api.showToast && api.showToast(`${ASSISTANT_NAME}: Voice assistant failed to start.`, 'error');
-      }
-    }
-
-    function stopListening() {
-      try {
-        userStopRequested = true;
-        if (recognition) recognition.stop();
-      } catch (e) { /* ignore */ }
-      listening = false;
-      clearSilenceTimer();
-      micButton.classList.remove('active');
-      // After explicit stop, if wake-word is enabled and mic permission previously granted,
-      // begin a lightweight hotword listener so saying "hey nexa" will wake the assistant.
-      if (hotwordEnabled && micPermissionGranted) startHotwordListener();
-    }
-
-    function startHotwordListener() {
-      if (!SpeechRecognition) return;
-      if (hotwordActive) return;
-      try {
-        hotwordRecognition = new SpeechRecognition();
-        hotwordRecognition.lang = 'en-US';
-        hotwordRecognition.interimResults = true;
-        hotwordRecognition.maxAlternatives = 1;
-        hotwordRecognition.continuous = true;
-
-        hotwordRecognition.onstart = () => {
-          hotwordActive = true;
-          micButton.classList.add('hotword');
-          friendlyLog('Hotword listener started');
-        };
-
-        hotwordRecognition.onresult = (ev) => {
-          const result = ev.results[ev.results.length - 1];
-          const isFinal = !!result.isFinal;
-          const text = (result && result[0] && result[0].transcript) ? result[0].transcript : '';
-          friendlyLog('Hotword heard (final=' + isFinal + '):', text);
-          const cleaned = (text || '').toLowerCase();
-          // Detect phrases like "hey nexa" or simply "nexa" (short utterances)
-          if (/\bhey\s+nexa\b/.test(cleaned) || (isFinal && /\bnexa\b/.test(cleaned))) {
-            friendlyLog('Wake word detected:', text);
-            try { if (hotwordRecognition) hotwordRecognition.stop(); } catch (e) { /* ignore */ }
-            hotwordActive = false;
-            micButton.classList.remove('hotword');
-            // brief audio cue to show activation (non-intrusive)
-            try { playAlarm(); } catch (e) { /* ignore */ }
-            userStopRequested = false;
-            // Start the full listener so the user can speak the command
-            setTimeout(() => startListening(), 120);
-          }
-        };
-
-        hotwordRecognition.onerror = (ev) => {
-          friendlyLog('Hotword recognition error', ev && ev.error);
-          stopHotwordListener();
-        };
-
-        hotwordRecognition.onend = () => {
-          friendlyLog('Hotword recognition ended');
-          hotwordActive = false;
-          micButton.classList.remove('hotword');
-          // Try to restart hotword listener automatically unless user explicitly stopped
-          if (hotwordEnabled && micPermissionGranted && !userStopRequested) {
-            try { setTimeout(() => hotwordRecognition && hotwordRecognition.start(), 400); } catch (e) { friendlyLog('hotword restart failed', e); }
-          }
-        };
-
-        hotwordRecognition.start();
-      } catch (e) {
-        friendlyLog('startHotwordListener failed', e);
-        hotwordActive = false;
-      }
-    }
-
-    function stopHotwordListener() {
-      try { userStopRequested = true; if (hotwordRecognition) hotwordRecognition.stop(); } catch (e) { /* ignore */ }
-      hotwordActive = false;
-      hotwordRecognition = null;
-      micButton.classList.remove('hotword');
-    }
-
     function speak(text) {
-      if (!synth) return api.showToast && api.showToast(text, 'info');
+      if (!synth) return;
       try {
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = 'en-US';
         synth.speak(u);
       } catch (e) {
-        console.error('SpeechSynthesis error', e);
+        console.error('Speech error:', e);
       }
     }
 
-    function speakIfAllowed(text, force = false) {
-      if (!text) return;
-      if (force) return speak(text);
-      if (!QUIET_MODE) speak(text);
-    }
-
-    // Small multi-beep alarm using WebAudio
-    function playAlarm() {
+    function startListening() {
       try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const beep = (t, freq) => {
-          const o = ctx.createOscillator();
-          const g = ctx.createGain();
-          o.type = 'sine';
-          o.frequency.value = freq || 880;
-          o.connect(g);
-          g.connect(ctx.destination);
-          g.gain.value = 0.0001;
-          o.start();
-          g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + 0.02);
-          g.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.35);
-          o.stop(ctx.currentTime + 0.36 + (t || 0));
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false; // disable interim to reduce lag
+        recognition.maxAlternatives = 1;
+        recognition.continuous = false; // single session only
+
+        recognition.onstart = () => {
+          listening = true;
+          micButton.classList.add('active');
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: Listening...`, 'info');
         };
-        beep(0, 880);
-        setTimeout(() => beep(0, 660), 220);
-        setTimeout(() => beep(0, 990), 460);
-      } catch (e) {
-        console.warn('Alarm play failed', e);
-      }
-    }
 
-    // Reminder check routine
-    async function checkReminders() {
-      try {
-        const tasks = (api.getTasks && api.getTasks()) || [];
-        const now = new Date();
-
-        tasks.forEach(task => {
-          if (!task || task.completed || !task.dueDate) return;
-
-          // Normalize date string (treat date-only as end-of-day)
-          let due = null;
-          try {
-            if (/^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) {
-              due = new Date(task.dueDate + 'T23:59:00');
-            } else {
-              due = new Date(task.dueDate);
-            }
-          } catch (e) {
-            due = new Date(task.dueDate);
+        recognition.onresult = (ev) => {
+          const result = ev.results[ev.results.length - 1];
+          const text = result[0].transcript || '';
+          if (result.isFinal && text) {
+            processCommand(text);
           }
+        };
 
-          const ms = due - now;
-          const hours = ms / (1000 * 60 * 60);
+        recognition.onerror = (ev) => {
+          api.showToast && api.showToast(`${ASSISTANT_NAME}: I didn't catch that.`, 'warning');
+        };
 
-          // Skip if already reminded recently
-          if (remindersSent[task.id]) return;
+        recognition.onend = () => {
+          listening = false;
+          micButton.classList.remove('active');
+        };
 
-          if (ms <= 0) {
-            // Overdue or due now
-            triggerReminder(task, 'now');
-            remindersSent[task.id] = Date.now();
-          } else if (hours <= LOOKAHEAD_HOURS) {
-            // Due within lookahead window
-            triggerReminder(task, hours);
-            remindersSent[task.id] = Date.now();
-          }
-        });
-
-        // Persist reminders to localStorage to avoid repeated notifications
-        localStorage.setItem('va_reminded', JSON.stringify(remindersSent));
-      } catch (err) {
-        console.error('Reminder check failed', err);
+        recognition.start();
+      } catch (e) {
+        console.error('Listen failed:', e);
+        api.showToast && api.showToast(`${ASSISTANT_NAME}: Error.`, 'error');
       }
     }
 
-    function triggerReminder(task, hours) {
-      const title = task.title || 'Untitled task';
-      let message = '';
-      if (hours === 'now') message = `Reminder: ${title} is due now or overdue.`;
-      else if (hours < 1) message = `Reminder: ${title} is due in less than an hour.`;
-      else {
-        const h = Math.round(hours);
-        message = `Reminder: ${title} is due in ${h} hour${h>1?'s':''}.`;
-      }
-
-      // Use Web Notification if available
+    function stopListening() {
       try {
-        if (window.Notification && Notification.permission === 'granted') {
-          new Notification('Task Reminder', { body: message });
-        } else if (window.Notification && Notification.permission !== 'denied') {
-          Notification.requestPermission().then(perm => {
-            if (perm === 'granted') new Notification('Task Reminder', { body: message });
-          });
-        }
+        if (recognition) recognition.stop();
       } catch (e) {
-        // ignore
+        /* ignore */
       }
-
-      // Visual toast + voice (prefix with assistant name). Reminders always speak.
-      api.showToast && api.showToast(`${ASSISTANT_NAME}: ${message}`, 'warning');
-      speak(`${ASSISTANT_NAME}: ${message.replace('Reminder: ', '')}`);
-      playAlarm();
+      listening = false;
+      micButton.classList.remove('active');
     }
 
-    // Wire task completion event to suggest next priority task
-    document.addEventListener('taskCompleted', (ev) => {
-      try {
-        const pending = (ev.detail && ev.detail.pendingTasks) || [];
-        if (pending.length > 0) {
-          const next = pending[0];
-          const response = `Great job. Next: ${next.title}.`;
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: ${response}`, 'success');
-          speakIfAllowed(`${ASSISTANT_NAME}: ${response}`);
-        } else {
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: All tasks complete.`, 'success');
-          speakIfAllowed(`${ASSISTANT_NAME}: All tasks complete.`);
-        }
-      } catch (e) {
-        console.error('taskCompleted handler error', e);
-      }
-    });
-
-    // Command processing
-    async function processCommand(raw, opts = {}) {
-      const direct = !!(opts && opts.direct);
+    async function processCommand(raw) {
       const text = (raw || '').toLowerCase().trim();
       if (!text) return;
-      friendlyLog('Processing command:', text, 'direct=' + direct);
 
-      // Helper: find best matching pending task by title
+      // Helper: find task by title
       function findTaskByTitle(q) {
-        if (!q) return null;
         const tasks = (api.getTasks && api.getTasks()) || [];
         const cleaned = q.toLowerCase().replace(/["']/g, '').trim();
-        // exact
         let candidate = tasks.find(t => !t.completed && t.title && t.title.toLowerCase() === cleaned);
         if (candidate) return candidate;
-        // substring
         candidate = tasks.find(t => !t.completed && t.title && t.title.toLowerCase().includes(cleaned));
         if (candidate) return candidate;
-        // all-words match
         const words = cleaned.split(/\s+/).filter(Boolean);
         candidate = tasks.find(t => !t.completed && t.title && words.every(w => t.title.toLowerCase().includes(w)));
         return candidate || null;
       }
 
-      // Add task (optionally: "add task <title>")
+      // 1. Add task
       if (text.includes('add task') || text.includes('create task')) {
-        // extract title after phrase if present
         let title = text.replace(/^.*(?:add|create)\s+task[s]?\s*/i, '').trim();
-        if (!title) title = '';
         if (api.openAddTaskModal) api.openAddTaskModal(title || undefined);
-        api.showToast && api.showToast(`${ASSISTANT_NAME}: Opened add-task dialog.`, 'info');
-        speakIfAllowed(`${ASSISTANT_NAME}: Opened add-task dialog.`, direct);
+        speak(`${ASSISTANT_NAME}: New task dialog opened.`);
         return;
       }
 
-      // Show pending tasks
-      if (text.includes('show pending') || text.includes('pending tasks')) {
+      // 2. Show pending tasks
+      if (text.includes('show') || text.includes('pending')) {
         api.showPendingTasks && api.showPendingTasks();
         const n = (api.getTasks && api.getTasks().filter(t => !t.completed).length) || 0;
-        api.showToast && api.showToast(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`, 'info');
-        speakIfAllowed(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`, direct);
+        speak(`${ASSISTANT_NAME}: You have ${n} pending task${n !== 1 ? 's' : ''}.`);
         return;
       }
 
-      // Read today's tasks (quiet mode: show toast instead of verbose reading)
-      if (text.includes('read') && (text.includes('today') || text.includes("today's"))) {
-        const todays = api.readTodaysTasks ? api.readTodaysTasks() : [];
-        if (!todays || todays.length === 0) {
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: No tasks due today.`, 'info');
-          speakIfAllowed(`${ASSISTANT_NAME}: You have no tasks due today.`, direct);
-        } else {
-          const titles = todays.map(t => t.title).filter(Boolean).slice(0, 6).join('; ');
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: Tasks today: ${titles}`, 'info');
-          // only speak full list if not quiet
-          if (!QUIET_MODE) speak(`${ASSISTANT_NAME}: You have ${todays.length} tasks due today. ${titles}`);
-        }
-        return;
-      }
-
-      // Open sticky notes
-      if (text.includes('open sticky') || text.includes('open notes') || text.includes('sticky notes')) {
-        api.switchSection && api.switchSection('notes-section');
-        api.showToast && api.showToast(`${ASSISTANT_NAME}: Opening notes.`, 'info');
-        speakIfAllowed(`${ASSISTANT_NAME}: Opening notes.`, direct);
-        return;
-      }
-
-      // Mark task complete (support many phrasings)
-      if (/(?:mark|set|make)?\s*(?:task)?\s*(?:complete|completed|done|finish)|\bdone\b|\bcomplete\b/.test(text)) {
-        // Try to extract the title via multiple heuristics
-        let title = null;
-        // patterns like "mark <title> complete"
-        let m = text.match(/mark\s+(.+?)\s+complete$/i);
-        if (m) title = m[1];
-        // patterns like "complete <title>"
-        if (!title) {
-          m = text.match(/(?:complete|done|finish)\s+(.+)/i);
-          if (m) title = m[1];
-        }
-        // fallback: remove keywords
-        if (!title) {
-          title = text.replace(/(?:mark|task|complete|completed|done|finish)/gi, '').trim();
-        }
-
+      // 3. Mark task complete
+      if (/(?:mark|complete|done|finish)/.test(text)) {
+        let title = text.replace(/(?:mark|task|complete|completed|done|finish)/gi, '').trim();
         const candidate = findTaskByTitle(title);
         if (candidate && api.markTaskCompleteByTitle) {
           await api.markTaskCompleteByTitle(candidate.title);
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: Marked '${candidate.title}' complete.`, 'success');
-          speakIfAllowed(`${ASSISTANT_NAME}: Marked ${candidate.title} complete.`, direct);
+          speak(`${ASSISTANT_NAME}: Marked ${candidate.title} complete.`);
         } else {
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: Could not find matching pending task.`, 'warning');
-          speakIfAllowed(`${ASSISTANT_NAME}: I couldn't find that task.`, direct);
+          speak(`${ASSISTANT_NAME}: I couldn't find that task.`);
         }
         return;
       }
 
-      // Next priority task
-      if (text.includes('next priority') || text.includes('what is my next') || text.includes('next important')) {
+      // 4. Next priority task
+      if (text.includes('next') || text.includes('priority')) {
         const next = api.getNextPriorityTask && api.getNextPriorityTask();
         if (next) {
-          const resp = `Your next priority task is ${next.title}${next.dueDate ? ' due ' + (new Date(next.dueDate)).toLocaleDateString() : ''}.`;
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: ${resp}`, 'info');
-          speakIfAllowed(`${ASSISTANT_NAME}: ${resp}`, direct);
+          speak(`${ASSISTANT_NAME}: Next task is ${next.title}.`);
         } else {
-          api.showToast && api.showToast(`${ASSISTANT_NAME}: You have no pending tasks.`, 'info');
-          speakIfAllowed(`${ASSISTANT_NAME}: You have no pending tasks.`, direct);
+          speak(`${ASSISTANT_NAME}: No pending tasks.`);
         }
         return;
       }
 
-      // Unknown command fallback (quiet)
-      api.showToast && api.showToast(`${ASSISTANT_NAME}: Command not recognized. Try: add task, show pending, mark task complete, next priority, or open notes.`, 'warning');
-      speakIfAllowed(`${ASSISTANT_NAME}: Sorry, I did not understand that.`, direct);
+      // Unknown command
+      speak(`${ASSISTANT_NAME}: Sorry, I didn't understand that.`);
     }
 
-    // Start the periodic reminders check
-    checkReminders();
-    const intervalHandle = setInterval(checkReminders, CHECK_INTERVAL);
-
-    // Expose a small cleanup API if needed
+    // Return simple control
     return {
-      stop: () => {
-        clearInterval(intervalHandle);
-        stopListening();
-      }
+      stop: () => stopListening()
     };
   };
 })();

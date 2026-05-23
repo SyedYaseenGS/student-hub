@@ -1834,80 +1834,46 @@ body.dark .note-card-footer {
   }
 }
 
-/* ------------------------------
-   Voice Assistant & Focus Mode
-   ------------------------------ */
+/* Voice Assistant (Simple Edition) */
 .voice-mic-btn {
   position: fixed;
   bottom: 22px;
   right: 22px;
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background-color: var(--primary);
+  border: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow: var(--shadow-lg);
-  color: var(--primary);
-  z-index: 500;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
-}
-.voice-mic-btn:hover { transform: translateY(-4px); }
-.voice-mic-btn.active {
-  background-color: var(--primary);
   color: white;
+  z-index: 500;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast);
+}
+.voice-mic-btn:hover {
+  transform: translateY(-4px);
   box-shadow: var(--shadow-primary);
-  transform: scale(1.03);
 }
-.voice-mic-btn .va-pulse {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: linear-gradient(90deg, var(--warning), var(--primary));
-  opacity: 0;
-  transform-origin: center;
-}
-.voice-mic-btn.active .va-pulse { opacity: 1; animation: va-pulse 1s ease-in-out infinite; }
-@keyframes va-pulse {
-  0% { transform: scale(0.8); opacity: 0.9; }
-  50% { transform: scale(1.25); opacity: 0.6; }
-  100% { transform: scale(0.9); opacity: 0.9; }
+.voice-mic-btn.active {
+  background-color: var(--success);
+  box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.15);
+  animation: va-pulse-simple 0.6s ease-in-out infinite;
 }
 
-/* Wake-word toggle inside mic */
-.voice-mic-btn .va-wake-toggle {
-  position: absolute;
-  left: 6px;
-  top: 6px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1px solid var(--border-color);
-  background: rgba(0,0,0,0.03);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 520;
-  transition: background-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+@keyframes va-pulse-simple {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
 }
-.voice-mic-btn .va-wake-toggle .va-wake-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--danger-light);
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-.voice-mic-btn .va-wake-toggle.on { background: var(--success-light); box-shadow: 0 6px 12px rgba(16,185,129,0.08); }
-.voice-mic-btn .va-wake-toggle.on .va-wake-dot { background: var(--success); transform: scale(1); }
-.voice-mic-btn .va-wake-toggle:not(.on) .va-wake-dot { background: var(--danger); transform: scale(0.9); }
 
 @media (max-width: 640px) {
-  .voice-mic-btn { right: 14px; bottom: 14px; }
+  .voice-mic-btn {
+    right: 14px;
+    bottom: 14px;
+    width: 50px;
+    height: 50px;
+  }
 }
