@@ -32,6 +32,8 @@
     let recognition = null;
     let listening = false;
     let userStopRequested = false;
+    let silenceTimer = null;
+    const SILENCE_TIMEOUT_MS = 5000; // auto-stop after 5 seconds of silence
     const ASSISTANT_NAME = 'Nexa';
     const QUIET_MODE = true; // minimal speech by default
     const remindersSent = JSON.parse(localStorage.getItem('va_reminded') || '{}');
@@ -61,12 +63,30 @@
       if (!listening) startListening(); else stopListening();
     });
 
+    function resetSilenceTimer() {
+      try {
+        if (silenceTimer) clearTimeout(silenceTimer);
+        silenceTimer = setTimeout(() => {
+          friendlyLog('Silence timeout reached — stopping recognition');
+          userStopRequested = true; // prevent auto-restart
+          try { if (recognition) recognition.stop(); } catch (e) { /* ignore */ }
+          listening = false;
+          micButton.classList.remove('active');
+        }, SILENCE_TIMEOUT_MS);
+      } catch (e) { /* ignore */ }
+    }
+
+    function clearSilenceTimer() {
+      try { if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null; } } catch (e) { }
+    }
+
     function startListening() {
       try {
         userStopRequested = false;
         recognition = new SpeechRecognition();
         recognition.lang = 'en-US';
-        recognition.interimResults = false;
+        // Allow interim results to detect speech quickly; act on final results only
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
         recognition.continuous = true;
 
@@ -77,11 +97,14 @@
         };
 
         recognition.onresult = (ev) => {
-          // Process latest result text
+          // Reset silence timer on any partial or final speech
+          resetSilenceTimer();
+          // Process only final results to avoid duplicate handling
           const result = ev.results[ev.results.length - 1];
+          const isFinal = !!result.isFinal;
           const text = (result && result[0] && result[0].transcript) ? result[0].transcript : '';
-          friendlyLog('Heard:', text);
-          if (text) processCommand(text || '');
+          friendlyLog('Heard (final=' + isFinal + '):', text);
+          if (isFinal && text) processCommand(text || '', { direct: true });
         };
 
         recognition.onerror = (ev) => {
@@ -91,6 +114,7 @@
 
         recognition.onend = () => {
           friendlyLog('Recognition ended');
+          clearSilenceTimer();
           // Auto-restart if user did not request stop (keeps listening)
           if (!userStopRequested) {
             try {
@@ -109,6 +133,8 @@
         };
 
         recognition.start();
+        // start silence timer so it auto-stops if user doesn't speak
+        resetSilenceTimer();
       } catch (e) {
         console.error('VA startListening failed', e);
         api.showToast && api.showToast(`${ASSISTANT_NAME}: Voice assistant failed to start.`, 'error');
@@ -121,6 +147,7 @@
         if (recognition) recognition.stop();
       } catch (e) { /* ignore */ }
       listening = false;
+      clearSilenceTimer();
       micButton.classList.remove('active');
     }
 
@@ -260,10 +287,11 @@
     });
 
     // Command processing
-    async function processCommand(raw) {
+    async function processCommand(raw, opts = {}) {
+      const direct = !!(opts && opts.direct);
       const text = (raw || '').toLowerCase().trim();
       if (!text) return;
-      friendlyLog('Processing command:', text);
+      friendlyLog('Processing command:', text, 'direct=' + direct);
 
       // Helper: find best matching pending task by title
       function findTaskByTitle(q) {
@@ -289,7 +317,7 @@
         if (!title) title = '';
         if (api.openAddTaskModal) api.openAddTaskModal(title || undefined);
         api.showToast && api.showToast(`${ASSISTANT_NAME}: Opened add-task dialog.`, 'info');
-        speakIfAllowed(`${ASSISTANT_NAME}: Opened add-task dialog.`);
+        speakIfAllowed(`${ASSISTANT_NAME}: Opened add-task dialog.`, direct);
         return;
       }
 
@@ -298,7 +326,7 @@
         api.showPendingTasks && api.showPendingTasks();
         const n = (api.getTasks && api.getTasks().filter(t => !t.completed).length) || 0;
         api.showToast && api.showToast(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`, 'info');
-        speakIfAllowed(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`);
+        speakIfAllowed(`${ASSISTANT_NAME}: ${n} pending task${n!==1?'s':''}.`, direct);
         return;
       }
 
@@ -307,7 +335,7 @@
         const todays = api.readTodaysTasks ? api.readTodaysTasks() : [];
         if (!todays || todays.length === 0) {
           api.showToast && api.showToast(`${ASSISTANT_NAME}: No tasks due today.`, 'info');
-          speakIfAllowed(`${ASSISTANT_NAME}: You have no tasks due today.`);
+          speakIfAllowed(`${ASSISTANT_NAME}: You have no tasks due today.`, direct);
         } else {
           const titles = todays.map(t => t.title).filter(Boolean).slice(0, 6).join('; ');
           api.showToast && api.showToast(`${ASSISTANT_NAME}: Tasks today: ${titles}`, 'info');
@@ -321,7 +349,7 @@
       if (text.includes('open sticky') || text.includes('open notes') || text.includes('sticky notes')) {
         api.switchSection && api.switchSection('notes-section');
         api.showToast && api.showToast(`${ASSISTANT_NAME}: Opening notes.`, 'info');
-        speakIfAllowed(`${ASSISTANT_NAME}: Opening notes.`);
+        speakIfAllowed(`${ASSISTANT_NAME}: Opening notes.`, direct);
         return;
       }
 
@@ -346,10 +374,10 @@
         if (candidate && api.markTaskCompleteByTitle) {
           await api.markTaskCompleteByTitle(candidate.title);
           api.showToast && api.showToast(`${ASSISTANT_NAME}: Marked '${candidate.title}' complete.`, 'success');
-          speakIfAllowed(`${ASSISTANT_NAME}: Marked ${candidate.title} complete.`);
+          speakIfAllowed(`${ASSISTANT_NAME}: Marked ${candidate.title} complete.`, direct);
         } else {
           api.showToast && api.showToast(`${ASSISTANT_NAME}: Could not find matching pending task.`, 'warning');
-          speakIfAllowed(`${ASSISTANT_NAME}: I couldn't find that task.`);
+          speakIfAllowed(`${ASSISTANT_NAME}: I couldn't find that task.`, direct);
         }
         return;
       }
@@ -360,17 +388,17 @@
         if (next) {
           const resp = `Your next priority task is ${next.title}${next.dueDate ? ' due ' + (new Date(next.dueDate)).toLocaleDateString() : ''}.`;
           api.showToast && api.showToast(`${ASSISTANT_NAME}: ${resp}`, 'info');
-          speakIfAllowed(`${ASSISTANT_NAME}: ${resp}`);
+          speakIfAllowed(`${ASSISTANT_NAME}: ${resp}`, direct);
         } else {
           api.showToast && api.showToast(`${ASSISTANT_NAME}: You have no pending tasks.`, 'info');
-          speakIfAllowed(`${ASSISTANT_NAME}: You have no pending tasks.`);
+          speakIfAllowed(`${ASSISTANT_NAME}: You have no pending tasks.`, direct);
         }
         return;
       }
 
       // Unknown command fallback (quiet)
       api.showToast && api.showToast(`${ASSISTANT_NAME}: Command not recognized. Try: add task, show pending, mark task complete, next priority, or open notes.`, 'warning');
-      speakIfAllowed(`${ASSISTANT_NAME}: Sorry, I did not understand that.`, false);
+      speakIfAllowed(`${ASSISTANT_NAME}: Sorry, I did not understand that.`, direct);
     }
 
     // Start the periodic reminders check
