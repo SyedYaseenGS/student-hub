@@ -42,21 +42,20 @@ initializeJsonFile(NOTES_FILE);
 const authRoutes = require('./routes/auth');
 const taskRoutes = require('./routes/tasks');
 const noteRoutes = require('./routes/notes');
-const voiceAIRoutes = require('./routes/voiceAI');
 
 // Map API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/notes', noteRoutes);
-app.use('/api/voiceAI', voiceAIRoutes);
 
-// Fallback to login for non-existent HTML pages, or redirect to index
-app.get('*', (req, res, next) => {
-  // If requesting api, let it handle error or 404
+// SPA fallback for page routes (not for missing static assets)
+app.get('*', (req, res) => {
   if (req.path.startsWith('/api')) {
     return res.status(404).json({ success: false, message: 'API Route not found' });
   }
-  // Otherwise, serve static index
+  if (/\.[a-z0-9]+$/i.test(req.path)) {
+    return res.status(404).send('Not found');
+  }
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -71,10 +70,21 @@ app.use((err, req, res, next) => {
 });
 
 // Start listening on port
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`=========================================`);
   console.log(`🚀 Student Task & Notes Manager is RUNNING`);
   console.log(`🖥️  Local server: http://localhost:${PORT}`);
   console.log(`📁 Local database folder: ${DATA_DIR}`);
   console.log(`=========================================`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n❌ Port ${PORT} is already in use.`);
+    console.error(`   Stop the other server (Ctrl+C in its terminal), or run:`);
+    console.error(`   $env:PORT=3001; npm start\n`);
+    process.exit(1);
+  }
+  console.error('Server failed to start:', err.message);
+  process.exit(1);
 });
