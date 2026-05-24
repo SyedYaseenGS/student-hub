@@ -1003,11 +1003,22 @@ document.addEventListener('DOMContentLoaded', () => {
       showToast
     };
 
+    // Initialize legacy voice assistant (optional, for compatibility)
     if (window.initializeVoiceAssistant) {
       try {
         window.initializeVoiceAssistant(voiceAPI);
       } catch (err) {
         console.error('Voice Assistant initialization failed:', err);
+      }
+    }
+
+    // Initialize new AI voice assistant (Nexa)
+    if (window.initializeVoiceAssistantAI) {
+      try {
+        window.initializeVoiceAssistantAI(voiceAPI);
+        console.log('✅ Nexa AI Voice Assistant initialized successfully');
+      } catch (err) {
+        console.error('❌ Nexa AI Voice Assistant initialization failed:', err);
       }
     }
   });

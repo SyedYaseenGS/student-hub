@@ -42,11 +42,13 @@ initializeJsonFile(NOTES_FILE);
 const authRoutes = require('./routes/auth');
 const taskRoutes = require('./routes/tasks');
 const noteRoutes = require('./routes/notes');
+const voiceAIRoutes = require('./routes/voiceAI');
 
 // Map API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/notes', noteRoutes);
+app.use('/api/voiceAI', voiceAIRoutes);
 
 // Fallback to login for non-existent HTML pages, or redirect to index
 app.get('*', (req, res, next) => {
